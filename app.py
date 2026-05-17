@@ -3,8 +3,15 @@ from bs4 import BeautifulSoup
 from docx import Document
 import os
 import zipfile
+import uuid
 
 app = Flask(__name__)
+
+UPLOAD_FOLDER = "uploads"
+OUTPUT_FOLDER = "outputs"
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 def html_to_docx(html_content, output_file):
     doc = Document()
@@ -28,19 +35,32 @@ def index():
 
 @app.route('/convert', methods=['POST'])
 def convert():
-    files = request.files.getlist('files')
-    zip_path = "converted_files.zip"
+    try:
+        files = request.files.getlist('files')
 
-    with zipfile.ZipFile(zip_path, 'w') as zipf:
-        for file in files:
-            if file.filename.endswith(".html"):
-                html_content = file.read().decode('utf-8')
-                output_name = file.filename.replace(".html", ".docx")
+        if not files:
+            return "No files uploaded"
 
-                html_to_docx(html_content, output_name)
-                zipf.write(output_name)
+        unique_id = str(uuid.uuid4())
+        zip_path = os.path.join(OUTPUT_FOLDER, f"{unique_id}.zip")
 
-    return send_file(zip_path, as_attachment=True)
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in files:
+                if file.filename.endswith(".html") or file.filename.endswith(".htm"):
+                    
+                    html_content = file.read().decode('utf-8')
+                    
+                    output_filename = file.filename.rsplit('.', 1)[0] + ".docx"
+                    output_path = os.path.join(OUTPUT_FOLDER, output_filename)
 
+                    html_to_docx(html_content, output_path)
+                    zipf.write(output_path, output_filename)
+
+        return send_file(zip_path, as_attachment=True)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+import os
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
